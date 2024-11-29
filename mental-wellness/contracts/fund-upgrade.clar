@@ -8,6 +8,9 @@
 (define-constant ERROR-INSUFFICIENT-BALANCE (err u103))
 (define-constant ERROR-DONATION-BELOW-MINIMUM (err u104))
 (define-constant ERROR-CONTRACT-INACTIVE (err u105))
+(define-constant ERROR-INVALID-MINIMUM-AMOUNT (err u106))
+(define-constant ERROR-INVALID-STATUS (err u107))
+(define-constant ERROR-INVALID-ADMINISTRATOR (err u108))
 
 ;; Data Variables
 (define-data-var contract-administrator principal tx-sender)
@@ -77,6 +80,30 @@
     ))
 )
 
+;; Private validation functions
+(define-private (validate-minimum-amount (amount uint))
+    (and 
+        (> amount u0)
+        (<= amount u1000000000000) ;; Set reasonable upper limit
+    )
+)
+
+(define-private (validate-status-value (status (string-ascii 20)))
+    (or 
+        (is-eq status "active")
+        (is-eq status "pending")
+        (is-eq status "suspended")
+        (is-eq status "completed")
+    )
+)
+
+(define-private (validate-administrator (address principal))
+    (and 
+        (not (is-eq address (var-get contract-administrator)))
+        (not (is-eq address (as-contract tx-sender)))
+    )
+)
+
 ;; Public functions
 (define-public (submit-donation)
     (let (
@@ -142,6 +169,7 @@
 (define-public (update-minimum-donation-requirement (new-minimum-amount uint))
     (begin
         (asserts! (verify-administrator-access) ERROR-UNAUTHORIZED-ACCESS)
+        (asserts! (validate-minimum-amount new-minimum-amount) ERROR-INVALID-MINIMUM-AMOUNT)
         (var-set minimum-donation-threshold new-minimum-amount)
         (ok true)
     )
@@ -174,6 +202,7 @@
 (define-public (update-beneficiary-status-record (beneficiary-address principal) (new-status-value (string-ascii 20)))
     (begin
         (asserts! (verify-administrator-access) ERROR-UNAUTHORIZED-ACCESS)
+        (asserts! (validate-status-value new-status-value) ERROR-INVALID-STATUS)
         (asserts! 
             (is-some (map-get? mental-health-beneficiaries beneficiary-address)) 
             ERROR-BENEFICIARY-NOT-FOUND
@@ -199,6 +228,7 @@
 (define-public (transfer-administrator-rights (new-administrator principal))
     (begin
         (asserts! (verify-administrator-access) ERROR-UNAUTHORIZED-ACCESS)
+        (asserts! (validate-administrator new-administrator) ERROR-INVALID-ADMINISTRATOR)
         (var-set contract-administrator new-administrator)
         (ok true)
     )
